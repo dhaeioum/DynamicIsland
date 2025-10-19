@@ -862,26 +862,29 @@ struct CalendarSettings: View {
 
     var body: some View {
         Form {
-            if calendarManager.calendarAuthorizationStatus != .fullAccess {
-                Text("Calendar access is denied. Please enable it in System Settings.")
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                
-                HStack {
-                    Button("Request Access") {
-                        Task {
-                            await calendarManager.checkCalendarAuthorization()
+            if !calendarManager.hasCalendarConnection {
+                VStack(spacing: 12) {
+                    Text(connectionMessage)
+                        .foregroundColor(connectionMessageColor)
+                        .multilineTextAlignment(.center)
+
+                    HStack(spacing: 12) {
+                        Button("Connect Calendar") {
+                            Task {
+                                await calendarManager.connectToCalendar()
+                            }
                         }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    
-                    Button("Open System Settings") {
-                        if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                            NSWorkspace.shared.open(settingsURL)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!calendarManager.canAttemptCalendarConnection)
+
+                        Button("Open System Settings") {
+                            if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                                NSWorkspace.shared.open(settingsURL)
+                            }
                         }
                     }
                 }
+                .padding(.vertical)
             } else {
                 // Permissions status
                 Section {
@@ -929,10 +932,11 @@ struct CalendarSettings: View {
         }
         .navigationTitle("Calendar")
     }
-    
+
     private func statusText(for status: EKAuthorizationStatus) -> String {
         switch status {
         case .fullAccess: return "Full Access"
+        case .authorized: return "Authorized"
         case .writeOnly: return "Write Only"
         case .denied: return "Denied"
         case .restricted: return "Restricted"
@@ -940,14 +944,39 @@ struct CalendarSettings: View {
         @unknown default: return "Unknown"
         }
     }
-    
+
     private func color(for status: EKAuthorizationStatus) -> Color {
         switch status {
         case .fullAccess: return .green
+        case .authorized: return .green
         case .writeOnly: return .yellow
         case .denied, .restricted: return .red
         case .notDetermined: return .secondary
         @unknown default: return .secondary
+        }
+    }
+
+    private var connectionMessage: String {
+        switch calendarManager.calendarAuthorizationStatus {
+        case .notDetermined:
+            return "Connect Dynamic Island to your calendar to start showing events."
+        case .writeOnly:
+            return "Calendar access is limited to write-only. Enable read access in System Settings to display events."
+        case .restricted, .denied:
+            return "Calendar access is denied. Please enable it in System Settings."
+        default:
+            return "Calendar access is currently unavailable."
+        }
+    }
+
+    private var connectionMessageColor: Color {
+        switch calendarManager.calendarAuthorizationStatus {
+        case .restricted, .denied:
+            return .red
+        case .writeOnly:
+            return .orange
+        default:
+            return .primary
         }
     }
 }
