@@ -92,9 +92,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindowController: NSWindowController?
     private var cancellables = Set<AnyCancellable>()
     private var windowsHiddenForLock = false
-    
+
     // Debouncing mechanism for window size updates
     private var windowSizeUpdateWorkItem: DispatchWorkItem?
+    private var notificationObservers: [NSObjectProtocol] = []
 //    let calendarManager = CalendarManager.shared
 //    let webcamManager = WebcamManager.shared
 //    var closeNotchWorkItem: DispatchWorkItem?
@@ -126,6 +127,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Cancel any pending window size updates
         windowSizeUpdateWorkItem?.cancel()
+        notificationObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        notificationObservers.removeAll()
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -433,42 +436,50 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name.selectedScreenChanged, object: nil, queue: nil
-        ) { [weak self] _ in
-            self?.adjustWindowPosition(changeAlpha: true)
-        }
-
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name.notchHeightChanged, object: nil, queue: nil
-        ) { [weak self] _ in
-            self?.adjustWindowPosition()
-        }
-
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name.automaticallySwitchDisplayChanged, object: nil, queue: nil
-        ) { [weak self] _ in
-            guard let self = self, let window = self.window else { return }
-            window.alphaValue =
-                self.coordinator.selectedScreen == self.coordinator.preferredScreen ? 1 : 0
-        }
-
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name.showOnAllDisplaysChanged, object: nil, queue: nil
-        ) { [weak self] _ in
-            guard let self = self else { return }
-            self.cleanupWindows(shouldInvert: true)
-
-            if !Defaults[.showOnAllDisplays] {
-                let viewModel = self.vm
-                let window = self.createDynamicIslandWindow(
-                    for: NSScreen.main ?? NSScreen.screens.first!, with: viewModel)
-                self.window = window
-                self.adjustWindowPosition(changeAlpha: true)
-            } else {
-                self.adjustWindowPosition()
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name.selectedScreenChanged, object: nil, queue: nil
+            ) { [weak self] _ in
+                self?.adjustWindowPosition(changeAlpha: true)
             }
-        }
+        )
+
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name.notchHeightChanged, object: nil, queue: nil
+            ) { [weak self] _ in
+                self?.adjustWindowPosition()
+            }
+        )
+
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name.automaticallySwitchDisplayChanged, object: nil, queue: nil
+            ) { [weak self] _ in
+                guard let self = self, let window = self.window else { return }
+                window.alphaValue =
+                    self.coordinator.selectedScreen == self.coordinator.preferredScreen ? 1 : 0
+            }
+        )
+
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name.showOnAllDisplaysChanged, object: nil, queue: nil
+            ) { [weak self] _ in
+                guard let self = self else { return }
+                self.cleanupWindows(shouldInvert: true)
+
+                if !Defaults[.showOnAllDisplays] {
+                    let viewModel = self.vm
+                    let window = self.createDynamicIslandWindow(
+                        for: NSScreen.main ?? NSScreen.screens.first!, with: viewModel)
+                    self.window = window
+                    self.adjustWindowPosition(changeAlpha: true)
+                } else {
+                    self.adjustWindowPosition()
+                }
+            }
+        )
 
         DistributedNotificationCenter.default().addObserver(
             self, selector: #selector(onScreenLocked(_:)),
